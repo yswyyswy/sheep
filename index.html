@@ -166,7 +166,6 @@
         let gameInterval;
         let timeInterval;
         let isGameRunning = false;
-        let obstacles = [];
         
         // 获取DOM元素
         const canvas = document.getElementById('gameCanvas');
@@ -193,7 +192,7 @@
             x: 100,
             y: 100,
             size: 32,
-            speed: 5,
+            speed: 6,
             dx: 0,
             dy: 0
         };
@@ -202,33 +201,34 @@
             x: 300,
             y: 300,
             size: 32,
-            speed: 4,
+            speed: 5.5,
             dx: 0,
             dy: 0,
-            changeDirectionTimer: 0
+            changeDirectionTimer: 0,
+            panicDistance: 150
         };
         
         // 绘制像素风小咩
         function drawSheep() {
-            // 绵羊身体 (白色)
+            // 小咩身体 (白色)
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(sheep.x, sheep.y, sheep.size, sheep.size);
             
-            // 绵羊脸 (浅粉色)
+            // 小咩脸 (浅粉色)
             ctx.fillStyle = '#f8c3cd';
             ctx.fillRect(sheep.x + 8, sheep.y + 8, 16, 16);
             
-            // 绵羊眼睛 (黑色)
+            // 小咩眼睛 (黑色)
             ctx.fillStyle = '#000000';
             ctx.fillRect(sheep.x + 12, sheep.y + 12, 4, 4);
             ctx.fillRect(sheep.x + 20, sheep.y + 12, 4, 4);
             
-            // 绵羊耳朵 (白色)
+            // 小咩耳朵 (白色)
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(sheep.x + 4, sheep.y + 4, 8, 8);
             ctx.fillRect(sheep.x + 20, sheep.y + 4, 8, 8);
             
-            // 绵羊角 (棕色)
+            // 小咩角 (棕色)
             ctx.fillStyle = '#8b4513';
             ctx.fillRect(sheep.x + 6, sheep.y, 4, 8);
             ctx.fillRect(sheep.x + 22, sheep.y, 4, 8);
@@ -259,57 +259,6 @@
             ctx.fillRect(penguin.x + 12, penguin.y + 12, 8, 4);
         }
         
-        // 绘制障碍物
-        function drawObstacles() {
-            ctx.fillStyle = '#5d9b9b';
-            obstacles.forEach(obstacle => {
-                // 绘制不同形状的障碍物
-                if (obstacle.type === 'rect') {
-                    ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
-                } else {
-                    ctx.beginPath();
-                    ctx.arc(obstacle.x, obstacle.y, obstacle.radius, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-            });
-        }
-        
-        // 生成随机障碍物
-        function generateObstacle() {
-            const types = ['rect', 'circle'];
-            const type = types[Math.floor(Math.random() * types.length)];
-            
-            if (type === 'rect') {
-                const width = 20 + Math.random() * 40;
-                const height = 20 + Math.random() * 40;
-                const obstacle = {
-                    type: 'rect',
-                    x: Math.random() * (canvas.width - width),
-                    y: Math.random() * (canvas.height - height),
-                    width: width,
-                    height: height
-                };
-                
-                // 确保障碍物不会与绵羊或企鹅重叠
-                if (!collision(obstacle, sheep) && !collision(obstacle, penguin)) {
-                    obstacles.push(obstacle);
-                }
-            } else {
-                const radius = 15 + Math.random() * 25;
-                const obstacle = {
-                    type: 'circle',
-                    x: Math.random() * (canvas.width - radius * 2) + radius,
-                    y: Math.random() * (canvas.height - radius * 2) + radius,
-                    radius: radius
-                };
-                
-                // 确保障碍物不会与绵羊或企鹅重叠
-                if (!collision(obstacle, sheep) && !collision(obstacle, penguin)) {
-                    obstacles.push(obstacle);
-                }
-            }
-        }
-        
         // 清空画布
         function clear() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -320,75 +269,62 @@
             clear();
             drawSheep();
             drawPenguin();
-            drawObstacles();
+        }
+        
+        // 计算两点之间距离
+        function distance(x1, y1, x2, y2) {
+            return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
         }
         
         // 更新游戏状态
         function update() {
-            // 移动绵羊
-            const prevX = sheep.x;
-            const prevY = sheep.y;
+            // 移动小咩
             sheep.x += sheep.dx;
             sheep.y += sheep.dy;
             
-            // 边界检测 - 绵羊
+            // 边界检测 - 小咩
             if (sheep.x < 0) sheep.x = 0;
             if (sheep.x + sheep.size > canvas.width) sheep.x = canvas.width - sheep.size;
             if (sheep.y < 0) sheep.y = 0;
             if (sheep.y + sheep.size > canvas.height) sheep.y = canvas.height - sheep.size;
             
-            // 检测绵羊与障碍物碰撞
-            let collided = false;
-            obstacles.forEach(obstacle => {
-                if (collision(sheep, obstacle)) {
-                    collided = true;
-                }
-            });
-            
-            // 如果碰撞到障碍物，回退位置
-            if (collided) {
-                sheep.x = prevX;
-                sheep.y = prevY;
-            }
-            
             // 企鹅AI - 更智能的逃跑逻辑
             penguin.changeDirectionTimer--;
+            
+            // 计算与小咩的距离
+            const distToSheep = distance(
+                penguin.x + penguin.size/2, 
+                penguin.y + penguin.size/2,
+                sheep.x + sheep.size/2,
+                sheep.y + sheep.size/2
+            );
+            
+            // 如果小咩靠近，企鹅会更快改变方向
+            const panicFactor = Math.max(0, 1 - distToSheep / penguin.panicDistance);
+            
             if (penguin.changeDirectionTimer <= 0 || 
                 penguin.x < 0 || penguin.x + penguin.size > canvas.width || 
                 penguin.y < 0 || penguin.y + penguin.size > canvas.height) {
                 
-                // 计算远离绵羊的方向
+                // 计算远离小咩的方向
                 const angle = Math.atan2(penguin.y - sheep.y, penguin.x - sheep.x);
                 
-                // 添加一些随机性
-                const randomAngle = angle + (Math.random() - 0.5) * Math.PI/2;
+                // 添加随机性和恐慌因子
+                const randomAngle = angle + (Math.random() - 0.5) * Math.PI * (0.5 + panicFactor);
                 
-                penguin.dx = Math.cos(randomAngle) * penguin.speed;
-                penguin.dy = Math.sin(randomAngle) * penguin.speed;
+                // 根据恐慌程度提高速度
+                const currentSpeed = penguin.speed * (1 + panicFactor * 0.5);
                 
-                penguin.changeDirectionTimer = 30 + Math.random() * 30;
+                penguin.dx = Math.cos(randomAngle) * currentSpeed;
+                penguin.dy = Math.sin(randomAngle) * currentSpeed;
+                
+                // 根据恐慌程度更快改变方向
+                penguin.changeDirectionTimer = Math.max(5, 30 * (1 - panicFactor));
             }
             
             // 移动企鹅
-            const penguinPrevX = penguin.x;
-            const penguinPrevY = penguin.y;
             penguin.x += penguin.dx;
             penguin.y += penguin.dy;
-            
-            // 检测企鹅与障碍物碰撞
-            let penguinCollided = false;
-            obstacles.forEach(obstacle => {
-                if (collision(penguin, obstacle)) {
-                    penguinCollided = true;
-                }
-            });
-            
-            // 如果企鹅碰撞到障碍物，回退位置并改变方向
-            if (penguinCollided) {
-                penguin.x = penguinPrevX;
-                penguin.y = penguinPrevY;
-                penguin.changeDirectionTimer = 0; // 立即改变方向
-            }
             
             // 边界检测 - 企鹅
             if (penguin.x < 0) {
@@ -419,17 +355,6 @@
                 
                 // 重置方向计时器
                 penguin.changeDirectionTimer = 0;
-                
-                // 生成1-2个新障碍物
-                const obstacleCount = 1 + Math.floor(Math.random() * 2);
-                for (let i = 0; i < obstacleCount; i++) {
-                    generateObstacle();
-                }
-                
-                // 保持障碍物数量在合理范围内
-                if (obstacles.length > 10) {
-                    obstacles.shift();
-                }
             }
             
             draw();
@@ -437,19 +362,10 @@
         
         // 碰撞检测
         function collision(obj1, obj2) {
-            if (obj2.type === 'circle') {
-                // 圆形碰撞检测
-                const dx = obj1.x + obj1.size/2 - obj2.x;
-                const dy = obj1.y + obj1.size/2 - obj2.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                return distance < (obj1.size/2 + obj2.radius);
-            } else {
-                // 矩形碰撞检测
-                return obj1.x < obj2.x + (obj2.width || obj2.size) &&
-                       obj1.x + obj1.size > obj2.x &&
-                       obj1.y < obj2.y + (obj2.height || obj2.size) &&
-                       obj1.y + obj1.size > obj2.y;
-            }
+            return obj1.x < obj2.x + obj2.size &&
+                   obj1.x + obj1.size > obj2.x &&
+                   obj1.y < obj2.y + obj2.size &&
+                   obj1.y + obj1.size > obj2.y;
         }
         
         // 计时器
@@ -467,12 +383,6 @@
             isGameRunning = true;
             score = 0;
             timeLeft = 60;
-            obstacles = [];
-            
-            // 生成初始障碍物
-            for (let i = 0; i < 3; i++) {
-                generateObstacle();
-            }
             
             // 重置位置
             sheep.x = 100;
@@ -566,9 +476,9 @@
             
             joystickKnob.style.transform = `translate(${knobX}px, ${knobY}px)`;
             
-            // 更新绵羊移动方向 (灵敏度提高)
-            sheep.dx = (knobX / joystickRadius) * sheep.speed * 1.5;
-            sheep.dy = (knobY / joystickRadius) * sheep.speed * 1.5;
+            // 更新小咩移动方向 (灵敏度提高)
+            sheep.dx = (knobX / joystickRadius) * sheep.speed * 2;
+            sheep.dy = (knobY / joystickRadius) * sheep.speed * 2;
         }
         
         function resetJoystick() {
