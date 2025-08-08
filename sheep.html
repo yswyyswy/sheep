@@ -1,0 +1,521 @@
+﻿<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>小咩追企鹅</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #a8d8ea;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            font-family: "Microsoft YaHei", "黑体", "宋体", sans-serif;
+            touch-action: manipulation;
+            overflow: hidden;
+        }
+        
+        #gameContainer {
+            position: relative;
+            width: 100%;
+            max-width: 400px;
+            height: 400px;
+            background-color: #a8d8ea;
+            border: 4px solid #5d9b9b;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        canvas {
+            display: block;
+        }
+        
+        #startScreen, #gameOverScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background-color: rgba(168, 216, 234, 0.9);
+            z-index: 10;
+        }
+        
+        #gameOverScreen {
+            display: none;
+        }
+        
+        h1 {
+            color: #5d9b9b;
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 24px;
+            text-shadow: 2px 2px 0px rgba(255,255,255,0.5);
+        }
+        
+        button {
+            background-color: #f8c3cd;
+            border: none;
+            color: #5d9b9b;
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            margin-top: 20px;
+            font-weight: bold;
+            box-shadow: 3px 3px 0px rgba(93, 155, 155, 0.3);
+            transition: all 0.2s;
+        }
+        
+        button:active {
+            transform: translateY(2px);
+            box-shadow: 1px 1px 0px rgba(93, 155, 155, 0.3);
+        }
+        
+        #scoreDisplay, #timeDisplay {
+            color: #5d9b9b;
+            font-size: 20px;
+            font-weight: bold;
+            margin: 10px 0;
+            text-align: center;
+        }
+        
+        .instructions {
+            color: #5d9b9b;
+            text-align: center;
+            max-width: 80%;
+            margin-bottom: 20px;
+            font-size: 16px;
+        }
+        
+        .character {
+            width: 32px;
+            height: 32px;
+            position: absolute;
+            image-rendering: pixelated;
+        }
+        
+        #controls {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+            width: 100%;
+            max-width: 400px;
+        }
+        
+        .control-btn {
+            width: 60px;
+            height: 60px;
+            margin: 0 10px;
+            background-color: #f8c3cd;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            user-select: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>小咩追企鹅</h1>
+    
+    <div id="scoreDisplay">得分: 0</div>
+    <div id="timeDisplay">时间: 60秒</div>
+    
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        
+        <div id="startScreen">
+            <h1>小咩追企鹅</h1>
+            <p class="instructions">控制小咩追逐小企鹅！<br>每碰到一次得1分<br>游戏时间60秒</p>
+            <button id="startButton">开始游戏</button>
+        </div>
+        
+        <div id="gameOverScreen">
+            <h1>游戏结束</h1>
+            <p class="instructions" id="finalScore">你的得分: 0</p>
+            <button id="restartButton">再玩一次</button>
+        </div>
+    </div>
+    
+    <div id="controls">
+        <div class="control-btn" id="leftBtn">←</div>
+        <div class="control-btn" id="upBtn">↑</div>
+        <div class="control-btn" id="rightBtn">→</div>
+        <div class="control-btn" id="downBtn">↓</div>
+    </div>
+    
+    <script>
+        // 游戏变量
+        let score = 0;
+        let timeLeft = 60;
+        let gameInterval;
+        let timeInterval;
+        let isGameRunning = false;
+        
+        // 获取DOM元素
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const startScreen = document.getElementById('startScreen');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const startButton = document.getElementById('startButton');
+        const restartButton = document.getElementById('restartButton');
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const timeDisplay = document.getElementById('timeDisplay');
+        const finalScore = document.getElementById('finalScore');
+        
+        // 控制按钮
+        const leftBtn = document.getElementById('leftBtn');
+        const upBtn = document.getElementById('upBtn');
+        const rightBtn = document.getElementById('rightBtn');
+        const downBtn = document.getElementById('downBtn');
+        
+        // 设置画布大小
+        function resizeCanvas() {
+            const container = document.getElementById('gameContainer');
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+        }
+        
+        // 游戏对象
+        const sheep = {
+            x: 100,
+            y: 100,
+            size: 32,
+            speed: 3,
+            dx: 0,
+            dy: 0
+        };
+        
+        const penguin = {
+            x: 300,
+            y: 300,
+            size: 32,
+            speed: 2
+        };
+        
+        // 绘制像素风小小咩
+        function drawSheep() {
+            // 小咩身体 (白色)
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(sheep.x, sheep.y, sheep.size, sheep.size);
+            
+            // 小咩脸 (浅粉色)
+            ctx.fillStyle = '#f8c3cd';
+            ctx.fillRect(sheep.x + 8, sheep.y + 8, 16, 16);
+            
+            // 小咩眼睛 (黑色)
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(sheep.x + 12, sheep.y + 12, 4, 4);
+            ctx.fillRect(sheep.x + 20, sheep.y + 12, 4, 4);
+            
+            // 小咩耳朵 (白色)
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(sheep.x + 4, sheep.y + 4, 8, 8);
+            ctx.fillRect(sheep.x + 20, sheep.y + 4, 8, 8);
+            
+            // 小咩角 (棕色)
+            ctx.fillStyle = '#8b4513';
+            ctx.fillRect(sheep.x + 6, sheep.y, 4, 8);
+            ctx.fillRect(sheep.x + 22, sheep.y, 4, 8);
+        }
+        
+        // 绘制像素风小企鹅
+        function drawPenguin() {
+            // 企鹅身体 (黑色)
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(penguin.x, penguin.y, penguin.size, penguin.size);
+            
+            // 企鹅肚子 (白色)
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(penguin.x + 4, penguin.y + 8, 24, 16);
+            
+            // 企鹅眼睛 (白色)
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(penguin.x + 8, penguin.y + 8, 8, 4);
+            ctx.fillRect(penguin.x + 16, penguin.y + 8, 8, 4);
+            
+            // 企鹅眼球 (黑色)
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(penguin.x + 12, penguin.y + 8, 2, 2);
+            ctx.fillRect(penguin.x + 20, penguin.y + 8, 2, 2);
+            
+            // 企鹅嘴 (橙色)
+            ctx.fillStyle = '#ffa500';
+            ctx.fillRect(penguin.x + 12, penguin.y + 12, 8, 4);
+        }
+        
+        // 清空画布
+        function clear() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        
+        // 绘制游戏元素
+        function draw() {
+            clear();
+            drawSheep();
+            drawPenguin();
+        }
+        
+        // 更新游戏状态
+        function update() {
+            // 移动小咩
+            sheep.x += sheep.dx;
+            sheep.y += sheep.dy;
+            
+            // 边界检测 - 小咩
+            if (sheep.x < 0) sheep.x = 0;
+            if (sheep.x + sheep.size > canvas.width) sheep.x = canvas.width - sheep.size;
+            if (sheep.y < 0) sheep.y = 0;
+            if (sheep.y + sheep.size > canvas.height) sheep.y = canvas.height - sheep.size;
+            
+            // 企鹅AI - 简单逃跑逻辑
+            if (Math.random() < 0.02) {
+                // 随机改变方向
+                const directions = [
+                    { dx: penguin.speed, dy: 0 },   // 右
+                    { dx: -penguin.speed, dy: 0 },  // 左
+                    { dx: 0, dy: penguin.speed },   // 下
+                    { dx: 0, dy: -penguin.speed }   // 上
+                ];
+                const randomDir = directions[Math.floor(Math.random() * directions.length)];
+                penguin.dx = randomDir.dx;
+                penguin.dy = randomDir.dy;
+            }
+            
+            // 企鹅逃跑逻辑 - 远离小咩
+            if (Math.random() < 0.1) {
+                if (sheep.x < penguin.x) penguin.dx = penguin.speed;
+                else penguin.dx = -penguin.speed;
+                
+                if (sheep.y < penguin.y) penguin.dy = penguin.speed;
+                else penguin.dy = -penguin.speed;
+            }
+            
+            // 移动企鹅
+            penguin.x += penguin.dx;
+            penguin.y += penguin.dy;
+            
+            // 边界检测 - 企鹅
+            if (penguin.x < 0) {
+                penguin.x = 0;
+                penguin.dx = penguin.speed;
+            }
+            if (penguin.x + penguin.size > canvas.width) {
+                penguin.x = canvas.width - penguin.size;
+                penguin.dx = -penguin.speed;
+            }
+            if (penguin.y < 0) {
+                penguin.y = 0;
+                penguin.dy = penguin.speed;
+            }
+            if (penguin.y + penguin.size > canvas.height) {
+                penguin.y = canvas.height - penguin.size;
+                penguin.dy = -penguin.speed;
+            }
+            
+            // 碰撞检测
+            if (collision(sheep, penguin)) {
+                score++;
+                scoreDisplay.textContent = `得分: ${score}`;
+                
+                // 碰到后企鹅随机传送到新位置
+                penguin.x = Math.random() * (canvas.width - penguin.size);
+                penguin.y = Math.random() * (canvas.height - penguin.size);
+            }
+            
+            draw();
+        }
+        
+        // 碰撞检测
+        function collision(obj1, obj2) {
+            return obj1.x < obj2.x + obj2.size &&
+                   obj1.x + obj1.size > obj2.x &&
+                   obj1.y < obj2.y + obj2.size &&
+                   obj1.y + obj1.size > obj2.y;
+        }
+        
+        // 计时器
+        function updateTime() {
+            timeLeft--;
+            timeDisplay.textContent = `时间: ${timeLeft}秒`;
+            
+            if (timeLeft <= 0) {
+                endGame();
+            }
+        }
+        
+        // 开始游戏
+        function startGame() {
+            isGameRunning = true;
+            score = 0;
+            timeLeft = 60;
+            
+            // 重置位置
+            sheep.x = 100;
+            sheep.y = 100;
+            sheep.dx = 0;
+            sheep.dy = 0;
+            
+            penguin.x = 300;
+            penguin.y = 300;
+            penguin.dx = 0;
+            penguin.dy = 0;
+            
+            // 更新显示
+            scoreDisplay.textContent = `得分: ${score}`;
+            timeDisplay.textContent = `时间: ${timeLeft}秒`;
+            
+            // 隐藏开始界面
+            startScreen.style.display = 'none';
+            gameOverScreen.style.display = 'none';
+            
+            // 开始游戏循环
+            gameInterval = setInterval(update, 20);
+            timeInterval = setInterval(updateTime, 1000);
+        }
+        
+        // 结束游戏
+        function endGame() {
+            isGameRunning = false;
+            clearInterval(gameInterval);
+            clearInterval(timeInterval);
+            
+            // 显示游戏结束界面
+            gameOverScreen.style.display = 'flex';
+            finalScore.textContent = `你的得分: ${score}`;
+        }
+        
+        // 事件监听
+        startButton.addEventListener('click', startGame);
+        restartButton.addEventListener('click', startGame);
+        
+        // 键盘控制
+        document.addEventListener('keydown', (e) => {
+            if (!isGameRunning) return;
+            
+            switch(e.key) {
+                case 'ArrowLeft':
+                    sheep.dx = -sheep.speed;
+                    break;
+                case 'ArrowUp':
+                    sheep.dy = -sheep.speed;
+                    break;
+                case 'ArrowRight':
+                    sheep.dx = sheep.speed;
+                    break;
+                case 'ArrowDown':
+                    sheep.dy = sheep.speed;
+                    break;
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            if (!isGameRunning) return;
+            
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                sheep.dx = 0;
+            }
+            
+            if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                sheep.dy = 0;
+            }
+        });
+        
+        // 触摸控制
+        leftBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (isGameRunning) sheep.dx = -sheep.speed;
+        });
+        
+        upBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (isGameRunning) sheep.dy = -sheep.speed;
+        });
+        
+        rightBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (isGameRunning) sheep.dx = sheep.speed;
+        });
+        
+        downBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (isGameRunning) sheep.dy = sheep.speed;
+        });
+        
+        // 触摸结束
+        leftBtn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (isGameRunning && sheep.dx < 0) sheep.dx = 0;
+        });
+        
+        upBtn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (isGameRunning && sheep.dy < 0) sheep.dy = 0;
+        });
+        
+        rightBtn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (isGameRunning && sheep.dx > 0) sheep.dx = 0;
+        });
+        
+        downBtn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (isGameRunning && sheep.dy > 0) sheep.dy = 0;
+        });
+        
+        // 鼠标控制 (用于桌面测试)
+        leftBtn.addEventListener('mousedown', () => {
+            if (isGameRunning) sheep.dx = -sheep.speed;
+        });
+        
+        upBtn.addEventListener('mousedown', () => {
+            if (isGameRunning) sheep.dy = -sheep.speed;
+        });
+        
+        rightBtn.addEventListener('mousedown', () => {
+            if (isGameRunning) sheep.dx = sheep.speed;
+        });
+        
+        downBtn.addEventListener('mousedown', () => {
+            if (isGameRunning) sheep.dy = sheep.speed;
+        });
+        
+        leftBtn.addEventListener('mouseup', () => {
+            if (isGameRunning && sheep.dx < 0) sheep.dx = 0;
+        });
+        
+        upBtn.addEventListener('mouseup', () => {
+            if (isGameRunning && sheep.dy < 0) sheep.dy = 0;
+        });
+        
+        rightBtn.addEventListener('mouseup', () => {
+            if (isGameRunning && sheep.dx > 0) sheep.dx = 0;
+        });
+        
+        downBtn.addEventListener('mouseup', () => {
+            if (isGameRunning && sheep.dy > 0) sheep.dy = 0;
+        });
+        
+        // 初始化
+        window.addEventListener('load', () => {
+            resizeCanvas();
+            draw();
+            
+            // 监听窗口大小变化
+            window.addEventListener('resize', () => {
+                resizeCanvas();
+                if (!isGameRunning) draw();
+            });
+        });
+    </script>
+</body>
+</html>
