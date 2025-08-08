@@ -96,15 +96,25 @@
             font-size: 16px;
         }
         
-        #touchIndicator {
+        #joystick {
             position: absolute;
-            width: 60px;
-            height: 60px;
+            bottom: 20px;
+            left: 20px;
+            width: 100px;
+            height: 100px;
             background-color: rgba(248, 195, 205, 0.5);
             border-radius: 50%;
-            pointer-events: none;
-            display: none;
             z-index: 5;
+        }
+        
+        #joystickKnob {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            background-color: rgba(93, 155, 155, 0.8);
+            border-radius: 50%;
+            top: 30px;
+            left: 30px;
         }
     </style>
 </head>
@@ -116,11 +126,13 @@
     
     <div id="gameContainer">
         <canvas id="gameCanvas"></canvas>
-        <div id="touchIndicator"></div>
+        <div id="joystick">
+            <div id="joystickKnob"></div>
+        </div>
         
         <div id="startScreen">
             <h1>小咩追企鹅</h1>
-            <p class="instructions">滑动屏幕控制小咩追逐企鹅！<br>每碰到一次得1分<br>游戏时间60秒</p>
+            <p class="instructions">使用左下角摇杆控制小咩追逐企鹅！<br>每碰到一次得1分<br>游戏时间60秒</p>
             <button id="startButton">开始游戏</button>
         </div>
         
@@ -138,8 +150,7 @@
         let gameInterval;
         let timeInterval;
         let isGameRunning = false;
-        let lastTouchX = 0;
-        let lastTouchY = 0;
+        let obstacles = [];
         
         // 获取DOM元素
         const canvas = document.getElementById('gameCanvas');
@@ -151,7 +162,8 @@
         const scoreDisplay = document.getElementById('scoreDisplay');
         const timeDisplay = document.getElementById('timeDisplay');
         const finalScore = document.getElementById('finalScore');
-        const touchIndicator = document.getElementById('touchIndicator');
+        const joystick = document.getElementById('joystick');
+        const joystickKnob = document.getElementById('joystickKnob');
         
         // 设置画布大小
         function resizeCanvas() {
@@ -165,7 +177,7 @@
             x: 100,
             y: 100,
             size: 32,
-            speed: 4,  // 提高绵羊速度
+            speed: 5,
             dx: 0,
             dy: 0
         };
@@ -174,7 +186,7 @@
             x: 300,
             y: 300,
             size: 32,
-            speed: 3.5,  // 提高企鹅速度
+            speed: 4,
             dx: 0,
             dy: 0,
             changeDirectionTimer: 0
@@ -231,6 +243,30 @@
             ctx.fillRect(penguin.x + 12, penguin.y + 12, 8, 4);
         }
         
+        // 绘制障碍物
+        function drawObstacles() {
+            ctx.fillStyle = '#5d9b9b';
+            obstacles.forEach(obstacle => {
+                ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+            });
+        }
+        
+        // 生成随机障碍物
+        function generateObstacle() {
+            const size = 20 + Math.random() * 30;
+            const obstacle = {
+                x: Math.random() * (canvas.width - size),
+                y: Math.random() * (canvas.height - size),
+                width: size,
+                height: size
+            };
+            
+            // 确保障碍物不会与绵羊或企鹅重叠
+            if (!collision(obstacle, sheep) && !collision(obstacle, penguin)) {
+                obstacles.push(obstacle);
+            }
+        }
+        
         // 清空画布
         function clear() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -241,6 +277,7 @@
             clear();
             drawSheep();
             drawPenguin();
+            drawObstacles();
         }
         
         // 更新游戏状态
@@ -306,16 +343,31 @@
                 
                 // 重置方向计时器
                 penguin.changeDirectionTimer = 0;
+                
+                // 生成1-3个新障碍物
+                const obstacleCount = 1 + Math.floor(Math.random() * 3);
+                for (let i = 0; i < obstacleCount; i++) {
+                    generateObstacle();
+                }
             }
+            
+            // 检测绵羊与障碍物碰撞
+            obstacles.forEach(obstacle => {
+                if (collision(sheep, obstacle)) {
+                    // 反弹效果
+                    sheep.dx = -sheep.dx * 0.5;
+                    sheep.dy = -sheep.dy * 0.5;
+                }
+            });
             
             draw();
         }
         
         // 碰撞检测
         function collision(obj1, obj2) {
-            return obj1.x < obj2.x + obj2.size &&
+            return obj1.x < obj2.x + (obj2.width || obj2.size) &&
                    obj1.x + obj1.size > obj2.x &&
-                   obj1.y < obj2.y + obj2.size &&
+                   obj1.y < obj2.y + (obj2.height || obj2.size) &&
                    obj1.y + obj1.size > obj2.y;
         }
         
@@ -334,6 +386,7 @@
             isGameRunning = true;
             score = 0;
             timeLeft = 60;
+            obstacles = [];
             
             // 重置位置
             sheep.x = 100;
@@ -371,50 +424,72 @@
             finalScore.textContent = `你的得分: ${score}`;
         }
         
-        // 触屏控制
-        canvas.addEventListener('touchstart', function(e) {
+        // 触控摇杆实现
+        let activeTouchId = null;
+        const joystickCenter = { x: 50, y: 50 };
+        const joystickRadius = 40;
+        
+        joystick.addEventListener('touchstart', function(e) {
             e.preventDefault();
-            const touch = e.touches[0];
-            lastTouchX = touch.clientX;
-            lastTouchY = touch.clientY;
-            
-            // 显示触控指示器
-            touchIndicator.style.display = 'block';
-            touchIndicator.style.left = (touch.clientX - 30) + 'px';
-            touchIndicator.style.top = (touch.clientY - 30) + 'px';
+            if (activeTouchId === null) {
+                activeTouchId = e.touches[0].identifier;
+                updateJoystickPosition(e.touches[0]);
+            }
         });
         
-        canvas.addEventListener('touchmove', function(e) {
-            e.preventDefault();
+        document.addEventListener('touchmove', function(e) {
             if (!isGameRunning) return;
             
-            const touch = e.touches[0];
-            const deltaX = touch.clientX - lastTouchX;
-            const deltaY = touch.clientY - lastTouchY;
-            
-            // 更新触控指示器位置
-            touchIndicator.style.left = (touch.clientX - 30) + 'px';
-            touchIndicator.style.top = (touch.clientY - 30) + 'px';
-            
-            // 根据滑动方向控制绵羊移动
-            if (Math.abs(deltaX) > Math.abs(deltaY)) {
-                sheep.dx = deltaX > 0 ? sheep.speed : -sheep.speed;
-                sheep.dy = 0;
-            } else {
-                sheep.dx = 0;
-                sheep.dy = deltaY > 0 ? sheep.speed : -sheep.speed;
+            for (let i = 0; i < e.touches.length; i++) {
+                if (e.touches[i].identifier === activeTouchId) {
+                    e.preventDefault();
+                    updateJoystickPosition(e.touches[i]);
+                    break;
+                }
             }
-            
-            lastTouchX = touch.clientX;
-            lastTouchY = touch.clientY;
         });
         
-        canvas.addEventListener('touchend', function(e) {
-            e.preventDefault();
-            touchIndicator.style.display = 'none';
+        document.addEventListener('touchend', function(e) {
+            if (!isGameRunning) return;
+            
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                if (e.changedTouches[i].identifier === activeTouchId) {
+                    resetJoystick();
+                    activeTouchId = null;
+                    break;
+                }
+            }
+        });
+        
+        function updateJoystickPosition(touch) {
+            const rect = joystick.getBoundingClientRect();
+            const touchX = touch.clientX - rect.left - joystickCenter.x;
+            const touchY = touch.clientY - rect.top - joystickCenter.y;
+            
+            // 计算距离和角度
+            const distance = Math.min(
+                Math.sqrt(touchX * touchX + touchY * touchY),
+                joystickRadius
+            );
+            
+            const angle = Math.atan2(touchY, touchX);
+            
+            // 更新摇杆手柄位置
+            const knobX = distance * Math.cos(angle);
+            const knobY = distance * Math.sin(angle);
+            
+            joystickKnob.style.transform = `translate(${knobX}px, ${knobY}px)`;
+            
+            // 更新绵羊移动方向 (灵敏度提高)
+            sheep.dx = (knobX / joystickRadius) * sheep.speed * 1.5;
+            sheep.dy = (knobY / joystickRadius) * sheep.speed * 1.5;
+        }
+        
+        function resetJoystick() {
+            joystickKnob.style.transform = 'translate(0, 0)';
             sheep.dx = 0;
             sheep.dy = 0;
-        });
+        }
         
         // 事件监听
         startButton.addEventListener('click', startGame);
