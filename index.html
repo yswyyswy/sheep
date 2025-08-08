@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
@@ -15,7 +15,7 @@
             justify-content: center;
             height: 100vh;
             font-family: "Microsoft YaHei", "黑体", "宋体", sans-serif;
-            touch-action: manipulation;
+            touch-action: none;
             overflow: hidden;
         }
         
@@ -32,6 +32,7 @@
         
         canvas {
             display: block;
+            touch-action: none;
         }
         
         #startScreen, #gameOverScreen {
@@ -95,32 +96,15 @@
             font-size: 16px;
         }
         
-        .character {
-            width: 32px;
-            height: 32px;
+        #touchIndicator {
             position: absolute;
-            image-rendering: pixelated;
-        }
-        
-        #controls {
-            display: flex;
-            justify-content: center;
-            margin-top: 20px;
-            width: 100%;
-            max-width: 400px;
-        }
-        
-        .control-btn {
             width: 60px;
             height: 60px;
-            margin: 0 10px;
-            background-color: #f8c3cd;
+            background-color: rgba(248, 195, 205, 0.5);
             border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            user-select: none;
+            pointer-events: none;
+            display: none;
+            z-index: 5;
         }
     </style>
 </head>
@@ -132,10 +116,11 @@
     
     <div id="gameContainer">
         <canvas id="gameCanvas"></canvas>
+        <div id="touchIndicator"></div>
         
         <div id="startScreen">
             <h1>小咩追企鹅</h1>
-            <p class="instructions">控制小咩追逐小企鹅！<br>每碰到一次得1分<br>游戏时间60秒</p>
+            <p class="instructions">滑动屏幕控制小咩追逐企鹅！<br>每碰到一次得1分<br>游戏时间60秒</p>
             <button id="startButton">开始游戏</button>
         </div>
         
@@ -146,13 +131,6 @@
         </div>
     </div>
     
-    <div id="controls">
-        <div class="control-btn" id="leftBtn">←</div>
-        <div class="control-btn" id="upBtn">↑</div>
-        <div class="control-btn" id="rightBtn">→</div>
-        <div class="control-btn" id="downBtn">↓</div>
-    </div>
-    
     <script>
         // 游戏变量
         let score = 0;
@@ -160,6 +138,8 @@
         let gameInterval;
         let timeInterval;
         let isGameRunning = false;
+        let lastTouchX = 0;
+        let lastTouchY = 0;
         
         // 获取DOM元素
         const canvas = document.getElementById('gameCanvas');
@@ -171,12 +151,7 @@
         const scoreDisplay = document.getElementById('scoreDisplay');
         const timeDisplay = document.getElementById('timeDisplay');
         const finalScore = document.getElementById('finalScore');
-        
-        // 控制按钮
-        const leftBtn = document.getElementById('leftBtn');
-        const upBtn = document.getElementById('upBtn');
-        const rightBtn = document.getElementById('rightBtn');
-        const downBtn = document.getElementById('downBtn');
+        const touchIndicator = document.getElementById('touchIndicator');
         
         // 设置画布大小
         function resizeCanvas() {
@@ -190,7 +165,7 @@
             x: 100,
             y: 100,
             size: 32,
-            speed: 3,
+            speed: 4,  // 提高绵羊速度
             dx: 0,
             dy: 0
         };
@@ -199,30 +174,33 @@
             x: 300,
             y: 300,
             size: 32,
-            speed: 2
+            speed: 3.5,  // 提高企鹅速度
+            dx: 0,
+            dy: 0,
+            changeDirectionTimer: 0
         };
         
-        // 绘制像素风小小咩
+        // 绘制像素风小咩
         function drawSheep() {
-            // 小咩身体 (白色)
+            // 绵羊身体 (白色)
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(sheep.x, sheep.y, sheep.size, sheep.size);
             
-            // 小咩脸 (浅粉色)
+            // 绵羊脸 (浅粉色)
             ctx.fillStyle = '#f8c3cd';
             ctx.fillRect(sheep.x + 8, sheep.y + 8, 16, 16);
             
-            // 小咩眼睛 (黑色)
+            // 绵羊眼睛 (黑色)
             ctx.fillStyle = '#000000';
             ctx.fillRect(sheep.x + 12, sheep.y + 12, 4, 4);
             ctx.fillRect(sheep.x + 20, sheep.y + 12, 4, 4);
             
-            // 小咩耳朵 (白色)
+            // 绵羊耳朵 (白色)
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(sheep.x + 4, sheep.y + 4, 8, 8);
             ctx.fillRect(sheep.x + 20, sheep.y + 4, 8, 8);
             
-            // 小咩角 (棕色)
+            // 绵羊角 (棕色)
             ctx.fillStyle = '#8b4513';
             ctx.fillRect(sheep.x + 6, sheep.y, 4, 8);
             ctx.fillRect(sheep.x + 22, sheep.y, 4, 8);
@@ -267,37 +245,32 @@
         
         // 更新游戏状态
         function update() {
-            // 移动小咩
+            // 移动绵羊
             sheep.x += sheep.dx;
             sheep.y += sheep.dy;
             
-            // 边界检测 - 小咩
+            // 边界检测 - 绵羊
             if (sheep.x < 0) sheep.x = 0;
             if (sheep.x + sheep.size > canvas.width) sheep.x = canvas.width - sheep.size;
             if (sheep.y < 0) sheep.y = 0;
             if (sheep.y + sheep.size > canvas.height) sheep.y = canvas.height - sheep.size;
             
-            // 企鹅AI - 简单逃跑逻辑
-            if (Math.random() < 0.02) {
-                // 随机改变方向
-                const directions = [
-                    { dx: penguin.speed, dy: 0 },   // 右
-                    { dx: -penguin.speed, dy: 0 },  // 左
-                    { dx: 0, dy: penguin.speed },   // 下
-                    { dx: 0, dy: -penguin.speed }   // 上
-                ];
-                const randomDir = directions[Math.floor(Math.random() * directions.length)];
-                penguin.dx = randomDir.dx;
-                penguin.dy = randomDir.dy;
-            }
-            
-            // 企鹅逃跑逻辑 - 远离小咩
-            if (Math.random() < 0.1) {
-                if (sheep.x < penguin.x) penguin.dx = penguin.speed;
-                else penguin.dx = -penguin.speed;
+            // 企鹅AI - 更智能的逃跑逻辑
+            penguin.changeDirectionTimer--;
+            if (penguin.changeDirectionTimer <= 0 || 
+                penguin.x < 0 || penguin.x + penguin.size > canvas.width || 
+                penguin.y < 0 || penguin.y + penguin.size > canvas.height) {
                 
-                if (sheep.y < penguin.y) penguin.dy = penguin.speed;
-                else penguin.dy = -penguin.speed;
+                // 计算远离绵羊的方向
+                const angle = Math.atan2(penguin.y - sheep.y, penguin.x - sheep.x);
+                
+                // 添加一些随机性
+                const randomAngle = angle + (Math.random() - 0.5) * Math.PI/2;
+                
+                penguin.dx = Math.cos(randomAngle) * penguin.speed;
+                penguin.dy = Math.sin(randomAngle) * penguin.speed;
+                
+                penguin.changeDirectionTimer = 30 + Math.random() * 30;
             }
             
             // 移动企鹅
@@ -330,6 +303,9 @@
                 // 碰到后企鹅随机传送到新位置
                 penguin.x = Math.random() * (canvas.width - penguin.size);
                 penguin.y = Math.random() * (canvas.height - penguin.size);
+                
+                // 重置方向计时器
+                penguin.changeDirectionTimer = 0;
             }
             
             draw();
@@ -369,6 +345,7 @@
             penguin.y = 300;
             penguin.dx = 0;
             penguin.dy = 0;
+            penguin.changeDirectionTimer = 0;
             
             // 更新显示
             scoreDisplay.textContent = `得分: ${score}`;
@@ -394,124 +371,62 @@
             finalScore.textContent = `你的得分: ${score}`;
         }
         
+        // 触屏控制
+        canvas.addEventListener('touchstart', function(e) {
+            e.preventDefault();
+            const touch = e.touches[0];
+            lastTouchX = touch.clientX;
+            lastTouchY = touch.clientY;
+            
+            // 显示触控指示器
+            touchIndicator.style.display = 'block';
+            touchIndicator.style.left = (touch.clientX - 30) + 'px';
+            touchIndicator.style.top = (touch.clientY - 30) + 'px';
+        });
+        
+        canvas.addEventListener('touchmove', function(e) {
+            e.preventDefault();
+            if (!isGameRunning) return;
+            
+            const touch = e.touches[0];
+            const deltaX = touch.clientX - lastTouchX;
+            const deltaY = touch.clientY - lastTouchY;
+            
+            // 更新触控指示器位置
+            touchIndicator.style.left = (touch.clientX - 30) + 'px';
+            touchIndicator.style.top = (touch.clientY - 30) + 'px';
+            
+            // 根据滑动方向控制绵羊移动
+            if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                sheep.dx = deltaX > 0 ? sheep.speed : -sheep.speed;
+                sheep.dy = 0;
+            } else {
+                sheep.dx = 0;
+                sheep.dy = deltaY > 0 ? sheep.speed : -sheep.speed;
+            }
+            
+            lastTouchX = touch.clientX;
+            lastTouchY = touch.clientY;
+        });
+        
+        canvas.addEventListener('touchend', function(e) {
+            e.preventDefault();
+            touchIndicator.style.display = 'none';
+            sheep.dx = 0;
+            sheep.dy = 0;
+        });
+        
         // 事件监听
         startButton.addEventListener('click', startGame);
         restartButton.addEventListener('click', startGame);
         
-        // 键盘控制
-        document.addEventListener('keydown', (e) => {
-            if (!isGameRunning) return;
-            
-            switch(e.key) {
-                case 'ArrowLeft':
-                    sheep.dx = -sheep.speed;
-                    break;
-                case 'ArrowUp':
-                    sheep.dy = -sheep.speed;
-                    break;
-                case 'ArrowRight':
-                    sheep.dx = sheep.speed;
-                    break;
-                case 'ArrowDown':
-                    sheep.dy = sheep.speed;
-                    break;
-            }
-        });
-        
-        document.addEventListener('keyup', (e) => {
-            if (!isGameRunning) return;
-            
-            if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-                sheep.dx = 0;
-            }
-            
-            if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-                sheep.dy = 0;
-            }
-        });
-        
-        // 触摸控制
-        leftBtn.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            if (isGameRunning) sheep.dx = -sheep.speed;
-        });
-        
-        upBtn.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            if (isGameRunning) sheep.dy = -sheep.speed;
-        });
-        
-        rightBtn.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            if (isGameRunning) sheep.dx = sheep.speed;
-        });
-        
-        downBtn.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            if (isGameRunning) sheep.dy = sheep.speed;
-        });
-        
-        // 触摸结束
-        leftBtn.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            if (isGameRunning && sheep.dx < 0) sheep.dx = 0;
-        });
-        
-        upBtn.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            if (isGameRunning && sheep.dy < 0) sheep.dy = 0;
-        });
-        
-        rightBtn.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            if (isGameRunning && sheep.dx > 0) sheep.dx = 0;
-        });
-        
-        downBtn.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            if (isGameRunning && sheep.dy > 0) sheep.dy = 0;
-        });
-        
-        // 鼠标控制 (用于桌面测试)
-        leftBtn.addEventListener('mousedown', () => {
-            if (isGameRunning) sheep.dx = -sheep.speed;
-        });
-        
-        upBtn.addEventListener('mousedown', () => {
-            if (isGameRunning) sheep.dy = -sheep.speed;
-        });
-        
-        rightBtn.addEventListener('mousedown', () => {
-            if (isGameRunning) sheep.dx = sheep.speed;
-        });
-        
-        downBtn.addEventListener('mousedown', () => {
-            if (isGameRunning) sheep.dy = sheep.speed;
-        });
-        
-        leftBtn.addEventListener('mouseup', () => {
-            if (isGameRunning && sheep.dx < 0) sheep.dx = 0;
-        });
-        
-        upBtn.addEventListener('mouseup', () => {
-            if (isGameRunning && sheep.dy < 0) sheep.dy = 0;
-        });
-        
-        rightBtn.addEventListener('mouseup', () => {
-            if (isGameRunning && sheep.dx > 0) sheep.dx = 0;
-        });
-        
-        downBtn.addEventListener('mouseup', () => {
-            if (isGameRunning && sheep.dy > 0) sheep.dy = 0;
-        });
-        
         // 初始化
-        window.addEventListener('load', () => {
+        window.addEventListener('load', function() {
             resizeCanvas();
             draw();
             
             // 监听窗口大小变化
-            window.addEventListener('resize', () => {
+            window.addEventListener('resize', function() {
                 resizeCanvas();
                 if (!isGameRunning) draw();
             });
