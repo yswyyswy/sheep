@@ -201,11 +201,12 @@
             x: 300,
             y: 300,
             size: 32,
-            speed: 5.5,
+            speed: 11,  // 企鹅基础速度提升2倍（原5.5）
             dx: 0,
             dy: 0,
             changeDirectionTimer: 0,
-            panicDistance: 150
+            panicDistance: 150,
+            maxSpeed: 22  // 企鹅最大速度（基础速度的2倍）
         };
         
         // 绘制像素风小咩
@@ -309,17 +310,17 @@
                 // 计算远离小咩的方向
                 const angle = Math.atan2(penguin.y - sheep.y, penguin.x - sheep.x);
                 
-                // 添加随机性和恐慌因子
-                const randomAngle = angle + (Math.random() - 0.5) * Math.PI * (0.5 + panicFactor);
+                // 添加随机性和恐慌因子（提高灵敏度）
+                const randomAngle = angle + (Math.random() - 0.5) * Math.PI * (0.8 + panicFactor * 0.5);
                 
-                // 根据恐慌程度提高速度
-                const currentSpeed = penguin.speed * (1 + panicFactor * 0.5);
+                // 根据恐慌程度提高速度（最高可达maxSpeed）
+                const currentSpeed = penguin.speed * (1 + panicFactor * 1.5);
                 
-                penguin.dx = Math.cos(randomAngle) * currentSpeed;
-                penguin.dy = Math.sin(randomAngle) * currentSpeed;
+                penguin.dx = Math.cos(randomAngle) * Math.min(currentSpeed, penguin.maxSpeed);
+                penguin.dy = Math.sin(randomAngle) * Math.min(currentSpeed, penguin.maxSpeed);
                 
-                // 根据恐慌程度更快改变方向
-                penguin.changeDirectionTimer = Math.max(5, 30 * (1 - panicFactor));
+                // 根据恐慌程度更快改变方向（灵敏度提升）
+                penguin.changeDirectionTimer = Math.max(3, 20 * (1 - panicFactor));
             }
             
             // 移动企鹅
